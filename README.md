@@ -1,4 +1,4 @@
-# hospital_sim
+# hospital-agv-sim
 
 [![ROS 2](https://img.shields.io/badge/ROS%202-Humble-blue.svg)](https://docs.ros.org/en/humble/)  
 [![Sim](https://img.shields.io/badge/Sim-Ignition%20Gazebo%20Fortress-orange.svg)](https://gazebosim.org/docs/fortress)  
@@ -113,11 +113,11 @@ All commands below assume a standard colcon workspace at `~/ros2_ws`.
 ```bash
 # 1. Clone into your ROS 2 workspace
 cd ~/ros2_ws/src
-git clone https://github.com/Narcis-Abella/hospital_sim.git
+git clone https://github.com/Narcis-Abella/hospital-agv-sim.git
 
 # 2. Build the package
 cd ~/ros2_ws
-colcon build --packages-select hospital_sim
+colcon build --packages-select hospital-agv-sim
 source install/setup.bash
 ```
 
@@ -131,13 +131,13 @@ source install/setup.bash
 **Headless mode** (default — recommended for Jetson or SSH sessions):
 
 ```bash
-ros2 launch hospital_sim simulation.launch.py
+ros2 launch hospital-agv-sim simulation.launch.py
 ```
 
 **GUI mode** (opens the Ignition Gazebo graphical client):
 
 ```bash
-ros2 launch hospital_sim simulation.launch.py headless:=false
+ros2 launch hospital-agv-sim simulation.launch.py headless:=false
 ```
 
 Validate that all processed sensor topics are active:
@@ -175,7 +175,7 @@ Expected processed topics after launch:
 ## Repository Structure
 
 ```text
-hospital_sim/
+hospital-agv-sim/
 ├── src/                # C++ sensor noise nodes (IMU, LiDAR, odom, Livox)
 ├── launch/             # ROS 2 launch files (simulation bring-up)
 ├── urdf/
