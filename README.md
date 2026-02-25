@@ -121,21 +121,30 @@ source install/setup.bash
 
 ---
 
+
 ## Usage / Quick Start
 
-Bring up the full simulation (Ignition + Tracer 2 + sensor bridges + C++ noise nodes):
+`simulation.launch.py` accepts a `headless` argument (default: `true`) that controls whether Ignition Gazebo runs with or without a graphical client.
+
+**Headless mode** (default — recommended for Jetson or SSH sessions):
 
 ```bash
 ros2 launch hospital_sim simulation.launch.py
 ```
 
-Validate that processed topics are present:
+**GUI mode** (opens the Ignition Gazebo graphical client):
+
+```bash
+ros2 launch hospital_sim simulation.launch.py headless:=false
+```
+
+Validate that all processed sensor topics are active:
 
 ```bash
 ros2 topic list | grep -E "imu|scan|odom|livox"
 ```
 
-Inspect a specific noise model, for example IMU:
+Inspect a specific noise model output, e.g. IMU:
 
 ```bash
 ros2 topic echo /imu/data --once
