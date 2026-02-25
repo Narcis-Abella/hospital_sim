@@ -7,56 +7,61 @@
 class NoisyLidarNode : public rclcpp::Node {
 public:
     NoisyLidarNode() : Node("noisy_lidar_node") {
-        this->declare_parameter("rel_noise", 0.01);
-        this->declare_parameter("min_noise", 0.003);
+        this->declare_parameter("rel_noise", 0.01);   // fractional range noise (1%)
+        this->declare_parameter("min_noise", 0.003f); // minimum noise floor (3 mm)
 
-        rel_noise_ = this->get_parameter("rel_noise").as_double();
-        min_noise_ = this->get_parameter("min_noise").as_double();
+        rel_noise_ = static_cast<float>(this->get_parameter("rel_noise").as_double());
+        min_noise_ = static_cast<float>(this->get_parameter("min_noise").as_double());
 
-        std::random_device rd;
-        gen_ = std::mt19937(rd());
-        dist_norm_ = std::normal_distribution<float>(0.0, 1.0);
+        gen_       = std::mt19937(std::random_device{}());
+        dist_norm_ = std::normal_distribution<float>(0.0f, 1.0f);
 
+        // SensorDataQoS matches ros_gz_bridge output (best-effort, volatile).
+        auto qos = rclcpp::SensorDataQoS();
         sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
-            "/scan_raw", 10, std::bind(&NoisyLidarNode::callback, this, std::placeholders::_1));
-        pub_ = this->create_publisher<sensor_msgs::msg::LaserScan>("/scan", 10);
-        
-        RCLCPP_INFO(this->get_logger(), "Lidar C++ Node Started. Rel: %.2f, Min: %.3f", rel_noise_, min_noise_);
+            "/scan_raw", qos,
+            std::bind(&NoisyLidarNode::callback, this, std::placeholders::_1));
+        pub_ = this->create_publisher<sensor_msgs::msg::LaserScan>("/scan", qos);
+
+        RCLCPP_INFO(this->get_logger(),
+            "2D LiDAR noise node started — model: proportional Gaussian "
+            "σ = max(%.3f m, %.2f·r)", min_noise_, rel_noise_);
     }
 
 private:
     void callback(const sensor_msgs::msg::LaserScan::SharedPtr msg) {
-        auto new_msg = *msg; // Copia eficiente
-        size_t n = new_msg.ranges.size();
+        auto out = *msg;
+        const size_t n = out.ranges.size();
 
-        for(size_t i = 0; i < n; ++i) {
-            float r = new_msg.ranges[i];
-            
-            // Filtro de validez: Inf, NaN o <= 0
-            if(!std::isfinite(r) || r <= 0.0f) continue;
+        for (size_t i = 0; i < n; ++i) {
+            const float r = out.ranges[i];
 
-            // Calculo de sigma
-            float sigma = std::max((float)min_noise_, (float)(rel_noise_ * r));
-            
-            // Generar ruido
-            float noise = sigma * dist_norm_(gen_);
-            float noisy_r = r + noise;
+            // Skip invalid returns (inf, NaN, out-of-range).
+            if (!std::isfinite(r) || r <= 0.0f) continue;
 
-            // Clamp (evitar salir del rango físico del sensor)
-            if (noisy_r < new_msg.range_min) noisy_r = new_msg.range_min;
-            if (noisy_r > new_msg.range_max) noisy_r = new_msg.range_max;
+            // Range-proportional Gaussian: σ = max(min_noise, rel_noise * r).
+            // Derived from RPLidar S2 ranging accuracy spec (±1% of distance).
+            const float sigma   = std::max(min_noise_, rel_noise_ * r);
+            const float noisy_r = r + sigma * dist_norm_(gen_);
 
-            new_msg.ranges[i] = noisy_r;
+            out.ranges[i] = std::clamp(noisy_r, out.range_min, out.range_max);
+
+            // Note: intensity values are left unmodified (ideal).
+            // If reflectance-based segmentation is added downstream,
+            // intensity noise should be modelled here.
         }
 
-        pub_->publish(new_msg);
+        pub_->publish(out);
     }
 
-    double rel_noise_, min_noise_;
+    float rel_noise_;
+    float min_noise_;
+
     std::mt19937 gen_;
     std::normal_distribution<float> dist_norm_;
+
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr sub_;
-    rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr pub_;
+    rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr    pub_;
 };
 
 int main(int argc, char **argv) {
