@@ -48,19 +48,7 @@ This repository provides a drop‑in ROS 2 Humble package with:
 
 ## Architecture & Data Flow
 
-```text
-Ignition Gazebo Sensor
-        │
-        │  gz.msgs.* (internal)
-        ▼
-ros_gz_bridge ───────────────→ /<sensor>_raw   (ROS 2, Reliable QoS)
-                                      │
-                              C++ Noise Node  <─── [RESEARCH-BACKED MODEL]
-                                      │
-                              /<sensor>        (ROS 2, Processed + Covariance)
-                                      │
-                           EKF / SLAM / Nav stack
-```
+![Sensor Noise Pipeline](docs/noisy_diagram.svg)
 
 ---
 
