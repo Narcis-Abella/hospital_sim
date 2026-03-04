@@ -216,7 +216,49 @@ This models the **systematic, unbounded heading drift** accumulating with distan
 
 ---
 
-## 6. Summary Table
+## 6. RGB-D Camera — Intel RealSense D455 (Gazebo-level noise, no dedicated C++ node)
+
+The RealSense D455 is used exclusively for **visual loop closure** in the RTAB-Map pipeline. Unlike the IMU, LiDAR, and odometry sensors, it does not have a dedicated C++ noise node in `src/` — but it is **not noise-free**: Gaussian depth noise is applied directly at the Gazebo simulator level via the sensor plugin in `urdf/sensors/camera.xacro`:
+
+```xml
+<noise>
+  <type>gaussian</type>
+  <mean>0.0</mean>
+  <stddev>0.003</stddev>   <!-- 3 mm depth noise (1σ) -->
+</noise>
+```
+
+This 3 mm standard deviation is sufficient to perturb the depth channel and introduce realistic variation into the RGB-D point cloud used by SuperPoint/SuperGlue or ORB-based loop closure descriptors.
+
+### Why no dedicated C++ noise node?
+
+A dedicated middleware node (as implemented for IMU, LiDAR, and odometry) is warranted when the sensor contributes to the **incremental pose estimate** — i.e., when its noise accumulates over time and causes trajectory drift. The camera does not play this role in this pipeline.
+
+The relevant performance metric for the camera is **place recognition accuracy**: the ability of the loop closure detector to correctly match a current view against a previously visited location. This metric is governed primarily by **viewpoint change, scene texture, and illumination consistency**. The depth noise already injected by Gazebo is sufficient to stress-test descriptor matching without requiring a more complex noise model.
+
+By contrast, IMU bias drift, LiDAR range noise, and odometry heading error integrate continuously into the pose graph and are the dominant sources of localization divergence between loop closures. These require metrologically grounded, datasheet-derived models — which is the purpose of the C++ noise pipeline.
+
+The asymmetry is deliberate:
+
+| Sensor | Role in pipeline | Error accumulation | Noise implementation |
+|---|---|---|---|
+| IMU | Incremental pose prior (LIO tight-coupling) | Yes — integrates over time | C++ node (Gauss-Markov + white noise) |
+| LiDAR (2D/3D) | Incremental scan matching | Yes — drift per scan | C++ node (piecewise Gaussian) |
+| Wheel odometry | Motion prior, TF encoder frame | Yes — unbounded yaw drift | C++ node (slip + random walk) |
+| RealSense D455 | Loop closure only | No — single-shot descriptor match | Gazebo plugin (Gaussian, σ = 3 mm) |
+
+This scoping is consistent with standard practice in LiDAR-inertial odometry (LIO) research [Zhang & Singh 2014].
+
+### Reference
+
+**[Zhang & Singh 2014]**
+J. Zhang, S. Singh. *LOAM: Lidar Odometry and Mapping in Real-time*. Robotics: Science and Systems, 2014.
+→ Establishes the LiDAR-inertial odometry paradigm in which camera input, when present, is used for appearance-based loop closure only. IMU and LiDAR error models are the primary focus of sensor noise characterisation.
+**URL:** https://www.ri.cmu.edu/pub_files/2014/7/Ji_LidarMapping_RSS2014_v8.pdf
+
+---
+
+## 7. Summary Table
 
 | Node | Sensor | Model | Primary source | Validation status |
 |---|---|---|---|---|
@@ -228,7 +270,7 @@ This models the **systematic, unbounded heading drift** accumulating with distan
 
 ---
 
-## 7. Future Work
+## 8. Future Work
 
 1. **Allan variance of physical WT901C:** Record ≥30 min static rosbag on the Jetson Orin NX, run Allan deviation analysis [IEEE Std 952-1997] to characterise `gyro_bias_tau_`, `gyro_bias_std_`, and confirm `gyro_white_std_`.
 2. **Odometry angular error characterisation:** Command known rotation angles on the Tracer 2.0, record rosbags, compute yaw error statistics [Borenstein & Feng 1996]. Replace the empirical 8% with a measured value.
@@ -238,7 +280,7 @@ This models the **systematic, unbounded heading drift** accumulating with distan
 
 ---
 
-## 8. Methodological References
+## 9. Methodological References
 
 The following references justify the choice of stochastic models, not just the numerical parameter values.
 
