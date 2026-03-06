@@ -34,18 +34,22 @@ The noise pipeline is implemented as a set of C++ nodes, one per sensor type (IM
 
 - subscribes to an ideal `/sensor_raw` topic,
 - applies a stochastic model derived from datasheets and literature where possible,
-- publishes a realistic `/sensor` topic with mean behaviour and covariances consistent with the chosen model.
+- publishes a realistic `/sensor` topic with mean behaviour and covariances consistent with that model.
 
-A concise summary of the models is:
+![Sensor Noise Pipeline](docs/noisy_diagram.png)
 
-| Sensor              | Model (summary)                                  | Main reference                              |
-|---------------------|--------------------------------------------------|---------------------------------------------|
+The diagram shows how ideal Gazebo topics are bridged into ROS 2 and passed through the noise nodes before reaching the localization stack.
+
+### Model summary
+
+| Sensor                  | Model (summary)                                  | Main reference                              |
+|-------------------------|--------------------------------------------------|---------------------------------------------|
 | IMU (WT901C / MPU‑9250) | Gauss‑Markov bias + white noise + quantization | MPU‑9250 spec, Woodman 2007                 |
-| 2D LiDAR (RPLIDAR A2M12) | Range‑dependent Gaussian                        | RPLIDAR A2 spec, beam model literature      |
-| 3D LiDAR (Livox Mid‑360) | Radial Gaussian, distance dependent            | Livox Mid‑360 spec, ICP error studies       |
-| Wheel odometry      | Slip + yaw random walk                           | Borenstein & Feng 1996; Siegwart et al. 2011 |
+| 2D LiDAR (RPLIDAR A2M12)| Range‑dependent Gaussian                        | RPLIDAR A2 spec, beam model literature      |
+| 3D LiDAR (Livox Mid‑360)| Radial Gaussian, distance dependent             | Livox Mid‑360 spec, ICP error studies       |
+| Wheel odometry          | Slip + yaw random walk                          | Borenstein & Feng 1996; Siegwart et al. 2011|
 
-All parameter choices, unit conversions and detailed justifications are documented in `docs/RESEARCH.md`. The README is intended to provide a high‑level view of the design.
+All parameter choices, unit conversions and detailed justifications are in `docs/RESEARCH.md`; implementation details and covariances are described in `docs/architecture.md`.
 
 ---
 
@@ -60,15 +64,6 @@ All parameter choices, unit conversions and detailed justifications are document
 - **Realism versus full calibration**  
   IMU and LiDAR noise parameters follow datasheets and standard stochastic models. Odometry parameters are chosen to reflect the order of magnitude observed on the Tracer 2, but they are not the result of a dedicated calibration campaign. The emphasis is on reproducing typical failure modes rather than matching a single calibrated robot exactly.
 
----
-
-## Architecture and data flow
-
-![Sensor Noise Pipeline](docs/noisy_diagram.png)
-
-The diagram shows how ideal simulation topics are bridged into ROS 2 and then passed through the C++ noise nodes before reaching the localization stack.
-
-More detail, including formulas and covariance entries, is in `docs/architecture.md`.
 
 ---
 
