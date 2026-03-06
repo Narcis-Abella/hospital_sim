@@ -6,49 +6,63 @@
 [![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)](LICENSE)
 
 ROS 2 / Ignition Gazebo hospital simulation for the AgileX Tracer 2.  
-The goal is to make the simulated sensors behave closer to the real hardware, so that localization and SLAM fail in simulation for the same reasons they fail on the robot.
+The point is simple: make the simulated sensors misbehave in ways that look like the real hardware, so localization and SLAM fail in simulation for the same reasons they fail on the robot.
 
 ---
 
-## Overview
+## Why this repo exists
 
-In early tests with the real Tracer 2 in hospital corridors, localization worked well in ideal simulation but degraded on the real robot. EKF and LiDAR-based SLAM were too optimistic because the simulated sensors had almost no noise or bias.
+In early tests with the real Tracer 2 in hospital corridors, localization worked nicely in “clean” simulation but degraded quickly on the robot. EKF and LiDAR-based SLAM were clearly too confident:
 
-This package adds:
+- simulated IMU had almost no bias or drift,
+- LiDAR ranges were too perfect,
+- wheel odometry did not accumulate the yaw error you actually see after a few tight turns.
 
-1. A hospital-scale world with corridors and occlusions.
-2. A URDF/xacro model of the Tracer 2 with a consistent TF tree.
-3. A C++ noise pipeline: it listens to ideal Gazebo topics and publishes ROS 2 topics with more realistic noise and covariances.
+This package adds three things on top of a standard ROS 2 simulation:
 
-The idea is to tune your localization stack once on realistic simulation and then move to the robot with fewer surprises.
+1. A hospital-scale world with corridors, corners and occlusions that look like a real building instead of a toy map.
+2. A URDF/xacro model of the Tracer 2 with a consistent TF tree and sensor frames.
+3. A C++ noise pipeline that listens to ideal Gazebo topics and republishes ROS 2 topics with realistic noise and covariances.
 
----
-
-## Main features
-
-- Per-sensor noise nodes (IMU, 2D LiDAR, 3D LiDAR, odometry).
-- Parameters linked to datasheets where possible (IMU, LiDAR); odometry based on literature plus observation.
-- Covariance matrices set so that the EKF trusts each sensor only where it makes sense (odometry heading is treated as weak, for example).
-- C++ implementation to keep latency low at 100 Hz+ on embedded hardware.
-
-Details and references are in `docs/RESEARCH.md`.
+The idea is to tune your localization stack once on this noisy simulation and then move to the robot with fewer surprises.
 
 ---
 
-## Design choices
+## What’s in the noise pipeline
 
-- **Noise layer instead of only retuning SLAM**  
-  Instead of over-tuning SLAM around perfect sensors, this repo tries to make the sensor topics themselves more realistic. That way, the same SLAM configuration is closer to usable in both simulation and on-robot tests.
+At a high level:
 
-- **C++ instead of Python for the hot path**  
-  The first version used Python for the noise nodes. At high sensor rates on a Jetson, this added visible jitter. Moving to C++ removes the interpreter from the critical path.
+- per-sensor noise nodes (IMU, 2D LiDAR, 3D LiDAR, wheel odometry),
+- parameters tied to datasheets where possible, and explicitly marked estimates where they are not,
+- covariance matrices filled in so the EKF can trust or distrust each sensor in the right places.
 
-- **Realism level**  
-  IMU and LiDAR models are based on datasheets and standard models. Odometry numbers are estimates in a reasonable range. The target is "good enough to reproduce typical failure modes", not a full calibration of one specific robot.
+Details and references live in `docs/RESEARCH.md`, but the short version is:
+
+| Sensor              | Model idea                                      | Why it looks like this            |
+|---------------------|-------------------------------------------------|-----------------------------------|
+| IMU (WT901C)        | Gauss–Markov bias + white noise + quantization | matches MPU‑9250 spec + literature |
+| 2D LiDAR (A2M12)    | Range‑proportional Gaussian                     | triangulation geometry            |
+| 3D LiDAR (Mid‑360)  | Radial Gaussian, distance dependent             | Livox range precision curves      |
+| Wheel odometry      | Slip + yaw random walk                          | Borenstein‑style differential drive model |
+
+The exact numbers, conversions and citations están documentados en `RESEARCH.md`. El README solo te da la intuición de alto nivel.
 
 ---
 
-## Architecture
+## Design choices (in plain language)
+
+- **Noise layer instead of “tuning harder”**  
+  You can always try to save a bad simulation setup by over‑tuning SLAM parameters, but then that tuning doesn’t transfer. Here the goal is the opposite: make the sensor topics themselves more honest, so the same EKF/SLAM configuration works in simulation and on the robot with minimal tweaks.
+
+- **C++ instead of Python once the prototype is clear**  
+  The first version of the noise nodes was in Python. At 100 Hz+ IMU rates on a Jetson, the GIL shows up in timing plots. Rewriting the hot path in C++ keeps latency and jitter low enough to not be the bottleneck.
+
+- **Realism vs. calibration**  
+  IMU and LiDAR models follow datasheets and standard stochastic models. Odometry parameters are in a realistic range but are not the result of a full calibration campaign. The target is to reproduce typical failure modes, not to perfectly match one individual robot.
+
+---
+
+## Architecture and data flow
 
 High-level data flow for each sensor:
 
@@ -64,17 +78,17 @@ C++ noise node  -->  /sensor
 
 - Gazebo publishes ideal data.
 - `ros_gz_bridge` exposes it to ROS 2.
-- The noise node subscribes to `*_raw`, applies the model, and publishes standard `sensor_msgs` with covariances filled in.
+- The noise node subscribes to `*_raw`, applies the chosen model, and publishes standard `sensor_msgs` with covariances filled in.
 
-More details, including formulas and covariance entries, are in `docs/architecture.md`.
+More detail, including exact formulas and covariance entries, is in `docs/architecture.md`.
 
 ---
 
-## Tech stack
+## Visuals and tech stack
 
 ![Sensor Noise Pipeline](docs/noisy_diagram.png)
 
-Comparison of the Livox Mid-360 point cloud in RViz2: **Raw Simulation** (left) vs. **Realistic Noise Model** (right). Note the radial "spreading" of points as distance increases.
+Comparison of the Livox Mid-360 point cloud in RViz2: **Raw Simulation** (left) vs. **Realistic Noise Model** (right). As distance increases, the point cloud spreads radially in a way that looks much closer to the real sensor.
 
 <div align="center">
   <img src="docs/livox_noisy_vs_raw.gif" width="100%" alt="Livox Noise Model Comparison">
@@ -154,4 +168,5 @@ MIT License. See `LICENSE` for details.
 
 - Hospital world for the original ROS 1 project by [`javicensaez/tracerSencillo`](https://github.com/javicensaez/tracerSencillo).
 - ROS 2 migration, sensor stack and noise nodes by Narcis Abella.
+
 
