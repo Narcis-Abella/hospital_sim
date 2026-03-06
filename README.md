@@ -6,59 +6,59 @@
 [![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)](LICENSE)
 
 ROS 2 / Ignition Gazebo hospital simulation for the AgileX Tracer 2.  
-The point is simple: make the simulated sensors misbehave in ways that look like the real hardware, so localization and SLAM fail in simulation for the same reasons they fail on the robot.
+The package focuses on reducing the sim‑to‑real gap in localization by making the behaviour of the simulated sensors closer to the real hardware.
 
 ---
 
-## Why this repo exists
+## Motivation and scope
 
-In early tests with the real Tracer 2 in hospital corridors, localization worked nicely in “clean” simulation but degraded quickly on the robot. EKF and LiDAR-based SLAM were clearly too confident:
+In real deployments of the AgileX Tracer 2 in hospital corridors, localization pipelines that were stable in “clean” simulation degraded noticeably on the robot. EKF and LiDAR‑based SLAM tended to underestimate uncertainty because the simulated sensors were almost ideal:
 
-- simulated IMU had almost no bias or drift,
-- LiDAR ranges were too perfect,
-- wheel odometry did not accumulate the yaw error you actually see after a few tight turns.
+- the IMU showed little bias or drift,
+- LiDAR ranges were nearly noise‑free,
+- wheel odometry did not accumulate the heading error observed after a sequence of turns.
 
-This package adds three things on top of a standard ROS 2 simulation:
+This repository extends a standard ROS 2 simulation with:
 
-1. A hospital-scale world with corridors, corners and occlusions that look like a real building instead of a toy map.
+1. A hospital‑scale world (~2,500 m²) with domain‑relevant occlusions and corridors.
 2. A URDF/xacro model of the Tracer 2 with a consistent TF tree and sensor frames.
-3. A C++ noise pipeline that listens to ideal Gazebo topics and republishes ROS 2 topics with realistic noise and covariances.
+3. A C++ sensor noise pipeline that consumes ideal Gazebo topics and republishes ROS 2 topics with realistic noise and covariances.
 
-The idea is to tune your localization stack once on this noisy simulation and then move to the robot with fewer surprises.
-
----
-
-## What’s in the noise pipeline
-
-At a high level:
-
-- per-sensor noise nodes (IMU, 2D LiDAR, 3D LiDAR, wheel odometry),
-- parameters tied to datasheets where possible, and explicitly marked estimates where they are not,
-- covariance matrices filled in so the EKF can trust or distrust each sensor in the right places.
-
-Details and references live in `docs/RESEARCH.md`, but the short version is:
-
-| Sensor              | Model idea                                      | Why it looks like this            |
-|---------------------|-------------------------------------------------|-----------------------------------|
-| IMU (WT901C)        | Gauss–Markov bias + white noise + quantization | matches MPU‑9250 spec + literature |
-| 2D LiDAR (A2M12)    | Range‑proportional Gaussian                     | triangulation geometry            |
-| 3D LiDAR (Mid‑360)  | Radial Gaussian, distance dependent             | Livox range precision curves      |
-| Wheel odometry      | Slip + yaw random walk                          | Borenstein‑style differential drive model |
-
-The exact numbers, conversions and citations están documentados en `RESEARCH.md`. El README solo te da la intuición de alto nivel.
+The goal is to tune the localization stack once in this environment and obtain behaviour that transfers more directly to the physical platform.
 
 ---
 
-## Design choices (in plain language)
+## Noise pipeline overview
 
-- **Noise layer instead of “tuning harder”**  
-  You can always try to save a bad simulation setup by over‑tuning SLAM parameters, but then that tuning doesn’t transfer. Here the goal is the opposite: make the sensor topics themselves more honest, so the same EKF/SLAM configuration works in simulation and on the robot with minimal tweaks.
+The noise pipeline is implemented as a set of C++ nodes, one per sensor type (IMU, 2D LiDAR, 3D LiDAR, wheel odometry). Each node:
 
-- **C++ instead of Python once the prototype is clear**  
-  The first version of the noise nodes was in Python. At 100 Hz+ IMU rates on a Jetson, the GIL shows up in timing plots. Rewriting the hot path in C++ keeps latency and jitter low enough to not be the bottleneck.
+- subscribes to an ideal `/sensor_raw` topic,
+- applies a stochastic model derived from datasheets and literature where possible,
+- publishes a realistic `/sensor` topic with mean behaviour and covariances consistent with the chosen model.
 
-- **Realism vs. calibration**  
-  IMU and LiDAR models follow datasheets and standard stochastic models. Odometry parameters are in a realistic range but are not the result of a full calibration campaign. The target is to reproduce typical failure modes, not to perfectly match one individual robot.
+A concise summary of the models is:
+
+| Sensor              | Model (summary)                                  | Main reference                              |
+|---------------------|--------------------------------------------------|---------------------------------------------|
+| IMU (WT901C / MPU‑9250) | Gauss‑Markov bias + white noise + quantization | MPU‑9250 spec, Woodman 2007                 |
+| 2D LiDAR (RPLIDAR A2M12) | Range‑dependent Gaussian                        | RPLIDAR A2 spec, beam model literature      |
+| 3D LiDAR (Livox Mid‑360) | Radial Gaussian, distance dependent            | Livox Mid‑360 spec, ICP error studies       |
+| Wheel odometry      | Slip + yaw random walk                           | Borenstein & Feng 1996; Siegwart et al. 2011 |
+
+All parameter choices, unit conversions and detailed justifications are documented in `docs/RESEARCH.md`. The README is intended to provide a high‑level view of the design.
+
+---
+
+## Design choices
+
+- **Noise layer instead of over‑tuning SLAM**  
+  The dominant source of mismatch between simulation and reality in this context is unrealistic sensor behaviour. It is therefore preferable to make the sensor topics more representative of the hardware than to compensate with aggressive SLAM parameter tuning that does not transfer.
+
+- **C++ implementation for the critical path**  
+  Early prototypes of the noise nodes were written in Python. At IMU rates of 100 Hz and above on Jetson platforms, interpreter overhead and the GIL introduced measurable jitter. The current C++ implementation keeps latency and timing variation low enough for realistic evaluation.
+
+- **Realism versus full calibration**  
+  IMU and LiDAR noise parameters follow datasheets and standard stochastic models. Odometry parameters are chosen to reflect the order of magnitude observed on the Tracer 2, but they are not the result of a dedicated calibration campaign. The emphasis is on reproducing typical failure modes rather than matching a single calibrated robot exactly.
 
 ---
 
