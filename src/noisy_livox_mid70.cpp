@@ -37,8 +37,8 @@ private:
         sensor_msgs::PointCloud2Iterator<float> out_z(out, "z");
 
         for (; in_x != in_x.end();
-             ++in_x, ++in_y, ++in_z,
-             ++out_x, ++out_y, ++out_z)
+               ++in_x, ++in_y, ++in_z,
+               ++out_x, ++out_y, ++out_z)
         {
             const float x = *in_x, y = *in_y, z = *in_z;
 
@@ -47,19 +47,23 @@ private:
             const float dist = std::sqrt(x * x + y * y + z * z);
             if (dist < 1e-6f) continue;
 
-            // Piecewise relative noise for Mid-70 (Longer range sensor):
-            // dist <= 20m -> 0.1% (yields ~2cm @ 20m)
-            // dist > 20m  -> 0.3% (yields increased noise at long range)
-            float rel_noise = (dist <= 20.0f) ? 0.001f : 0.003f;
+            // Piecewise relative noise for Mid-360:
+            // dist <= 6m -> 0.4% (yields ~2cm @ 5m)
+            // dist > 6m  -> 0.7% (yields ~3.5cm @ 5m, increasing accuracy gap)
+            float rel_noise = (dist <= 6.0f) ? 0.004f : 0.007f;
 
             const float sigma = std::max(min_noise_, rel_noise * dist);
-            const float ratio = 1.0f + (sigma * dist_norm_(gen_)) / dist;
+            const float noise_sample = std::clamp(dist_norm_(gen_), -3.0f, 3.0f);
+	    const float ratio = 1.0f + (sigma * noise_sample) / dist;
 
+	    if (ratio <= 0.0f) {
+	        *out_x = x; *out_y = y; *out_z = z;
+	        continue;
+	    }
             *out_x = x * ratio;
             *out_y = y * ratio;
             *out_z = z * ratio;
         }
-
         pub_->publish(out);
     }
 

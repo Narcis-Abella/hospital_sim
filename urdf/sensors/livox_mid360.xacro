@@ -59,7 +59,7 @@
           <scan>
             <!-- Horizontal: 360° completos -->
             <horizontal>
-              <samples>400</samples>
+              <samples>625</samples>
               <resolution>1</resolution>
               <min_angle>-3.14159265</min_angle>   <!-- -180° -->
               <max_angle>3.14159265</max_angle>     <!--  180° -->
@@ -68,7 +68,7 @@
             <!-- Vertical: -7° a +52° (FOV real del Mid-360) -->
             <!-- En radianes: -7° = -0.1222  |  +52° = 0.9076 -->
             <vertical>
-              <samples>32</samples>
+              <samples>50</samples>
               <resolution>1</resolution>
               <min_angle>-0.1222</min_angle>
               <max_angle>0.9076</max_angle>

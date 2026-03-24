@@ -53,13 +53,17 @@ private:
             float rel_noise = (dist <= 6.0f) ? 0.004f : 0.007f;
 
             const float sigma = std::max(min_noise_, rel_noise * dist);
-            const float ratio = 1.0f + (sigma * dist_norm_(gen_)) / dist;
+            const float noise_sample = std::clamp(dist_norm_(gen_), -3.0f, 3.0f);
+	    const float ratio = 1.0f + (sigma * noise_sample) / dist;
 
+	    if (ratio <= 0.0f) {
+	        *out_x = x; *out_y = y; *out_z = z;
+	        continue;
+	    }
             *out_x = x * ratio;
             *out_y = y * ratio;
             *out_z = z * ratio;
         }
-
         pub_->publish(out);
     }
 
