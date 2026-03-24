@@ -81,12 +81,6 @@
             <resolution>0.002</resolution>  <!-- 2 mm resolución de rango -->
           </range>
 
-          <!-- Simulación básica de ruido óptico (el nodo .cpp añade más) -->
-          <noise>
-            <type>gaussian</type>
-            <mean>0.0</mean>
-            <stddev>0.002</stddev>
-          </noise>
         </lidar>
 
         <always_on>1</always_on>
