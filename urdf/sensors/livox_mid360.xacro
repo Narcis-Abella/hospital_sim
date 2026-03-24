@@ -62,7 +62,7 @@
               <samples>625</samples>
               <resolution>1</resolution>
               <min_angle>-3.14159265</min_angle>   <!-- -180° -->
-              <max_angle>3.14159265</max_angle>     <!--  180° -->
+              <max_angle>3.13153</max_angle>     <!--  180° -->
             </horizontal>
 
             <!-- Vertical: -7° a +52° (FOV real del Mid-360) -->
